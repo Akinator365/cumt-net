@@ -1,0 +1,20 @@
+config cumt_login
+	option enabled '0'
+
+config login '1e8c7c9a16db4e14bde02afe94926c64'
+	option enable '1'
+	option action 'login'
+	option account '3245345'
+	option password '43532453425'
+	option isp 'cumt'
+	option weekdays '1'
+	option time '08:15:00'
+
+config passwall '665c1fa2426c451788d57cbd39ba234'
+	option enable '1'
+	option remarks '2353254235'
+	option action 'enable'
+	option node 'cumt'
+	option mode 'global'
+	option weekdays '1 2'
+	option time '14:28:20'
