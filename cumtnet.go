@@ -263,40 +263,40 @@ func sendLoginRequest(config loginConfig) {
 // execPasswallCommand
 func execPasswallCommand(config passwallConfig) {
     if config.Action == "enable" {
-        // 修改配置项，将 enabled 设置为 1
-        err := setConfigValue("1")
-        if err != nil {
-            log.Printf("启用 Passwall 失败: %v", err)
-            return
-        }
-        log.Println("Passwall 已启用")
-
+		// 示例：选择 global 配置集并更新配置
+		err := updatePasswallConfig(config.Mode, config.Node, config.Node)
+		if err != nil {
+			log.Fatalf("更新配置失败: %v", err)
+		} else {
+			log.Println("配置更新成功")
+		}
     } else if config.Action == "disable" {
         // 修改配置项，将 enabled 设置为 0
-        err := setConfigValue("0")
-        if err != nil {
-            log.Printf("禁用 Passwall 失败: %v", err)
-            return
-        }
+		err := executeUciCommand("uci", []string{"set", "passwall.@global[0].enabled=0"})
+		if err != nil {
+			log.Fatalf("更新配置失败: %v", err)
+			return
+		}
         log.Println("Passwall 已禁用")
     } else {
         log.Printf("无效的 action: %s，跳过执行", config.Action)
         return
     }
 
-    // 提交更改
-    err := commitConfigChanges()
-    if err != nil {
-        log.Printf("提交配置更改失败: %v", err)
-        return
-    }
+	// 提交更改
+	err := executeUciCommand("uci", []string{"commit", "passwall"})
+	if err != nil {
+		log.Fatalf("提交配置失败: %v", err)
+		return
+	}
 
-    // 重启服务
-    err = restartService()
-    if err != nil {
-        log.Printf("重启 Passwall 服务失败: %v", err)
-        return
-    }
+	// 重启 passwall 服务
+	err = executeUciCommand("/etc/init.d/passwall", []string{"restart"})
+	if err != nil {
+		log.Fatalf("重启 passwall 服务失败: %v", err)
+		return
+	}
+	
 
     log.Println("Passwall 配置已更新并重启服务")
 }
@@ -623,9 +623,9 @@ func main() {
 
 	// 输出 passwallTaskEnable 的值
 	if passwallTaskEnable {
-		log.Println("Passwall 配置已启用，任务可以执行。")
+		log.Println("Passwall 配置已启用，Passwall 任务可以执行。")
 	} else {
-		log.Println("Passwall 配置未启用，任务不可执行。")
+		log.Println("Passwall 配置未启用，Passwall 任务不可执行。")
 	}
 
 	log.Println("----------------------------------------程序启动----------------------------------------")
@@ -644,45 +644,7 @@ func main() {
 
 	// 启动任务
 	updateTaskRunners(loginConfigs, passwallConfigs) 
-	/*
-	// 获取当前值
-	value, err := getConfigValue()
-	if err != nil {
-		log.Fatalf("Error getting config value: %v", err)
-	}
-	fmt.Printf("Current value of enabled: %s\n", value)
 
-	// 翻转值：如果为 '0'，则设置为 '1'；否则设置为 '0'
-	var newValue string
-	if value == "0" {
-		newValue = "1"
-	} else if value == "1" {
-		newValue = "0"
-	} else {
-		log.Fatalf("Unexpected value for enabled: %s", value)
-	}
-
-	// 修改配置值
-	err = setConfigValue(newValue)
-	if err != nil {
-		log.Fatalf("Error setting config value: %v", err)
-	}
-	fmt.Printf("Config value has been updated to: %s\n", newValue)
-
-	// 提交配置更改
-	err = commitConfigChanges()
-	if err != nil {
-		log.Fatalf("Error committing config changes: %v", err)
-	}
-	fmt.Println("Configuration changes have been committed.")
-
-	// 重启服务
-	err = restartService()
-	if err != nil {
-		log.Fatalf("Error restarting service: %v", err)
-	}
-	fmt.Println("Service has been restarted successfully.")
-	*/
 	// 主线程保持运行
 	select {}
 }
@@ -699,6 +661,19 @@ func initializePasswallTask() {
 	}
 }
 
+// 执行 uci 命令的通用函数
+func executeUciCommand(command string, args []string) error {
+	cmd := exec.Command(command, args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("命令失败: %s %v, 错误信息: %v", command, args, err)
+		log.Printf("命令输出: %s", output)
+		return err
+	}
+	log.Printf("命令成功: %s %v, 输出: %s", command, args, output)
+	return nil
+}
+
 // 获取配置项的当前值
 func getConfigValue() (string, error) {
 	// 执行 uci get 命令获取当前值
@@ -711,35 +686,100 @@ func getConfigValue() (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
-// 修改配置项的值
-func setConfigValue(value string) error {
-	// 执行 uci set 命令设置新的值
-	cmd := exec.Command("uci", "set", fmt.Sprintf("passwall.@global[0].enabled=%s", value))
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to set config value: %v", err)
+// 更新 passwall 配置，根据 mode 选择不同的配置集
+func updatePasswallConfig(mode string, tcpNode string, udpNode string) error {
+	// 根据 mode 设置相应的配置内容
+	var useDirectList, useProxyList, useBlockList, useGfwList, dnsShunt, chnList, remoteDns, dnsRedirect, tcpRedirPorts string
+	if mode == "rule" {
+		// rule 配置集
+		useDirectList = "1"
+		useProxyList = "1"
+		useBlockList = "1"
+		useGfwList = "1"
+		dnsShunt = "chinadns-ng"
+		chnList = "direct"
+		remoteDns = "1.1.1.1"
+		dnsRedirect = "0"
+		tcpRedirPorts = "22,25,53,143,465,587,853,993,995,80,443"
+	} else {
+		// global 配置集
+		useDirectList = "0"
+		useProxyList = "0"
+		useBlockList = "0"
+		useGfwList = "0"
+		dnsShunt = "dnsmasq"
+		chnList = "proxy"
+		remoteDns = "202.119.203.3"
+		dnsRedirect = "1"
+		tcpRedirPorts = "1:65535"
 	}
-	return nil
-}
 
-// 提交配置更改
-func commitConfigChanges() error {
-	// 执行 uci commit 命令提交更改
-	cmd := exec.Command("uci", "commit", "passwall")
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to commit config changes: %v", err)
+	// 配置命令，根据 mode 选择相应的配置内容
+	commands := []struct {
+		command string
+		args    []string
+	}{
+		// 设置 tcp_node 和 udp_node
+		{
+			command: "uci",
+			args:    []string{"set", fmt.Sprintf("passwall.@global[0].tcp_node=%s", tcpNode)},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", fmt.Sprintf("passwall.@global[0].udp_node=%s", udpNode)},
+		},
+		// 设置其他选项（根据 mode 动态选择）
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].enabled=1"},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].use_direct_list=" + useDirectList},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].use_proxy_list=" + useProxyList},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].use_block_list=" + useBlockList},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].use_gfw_list=" + useGfwList},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].dns_shunt=" + dnsShunt},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].chn_list=" + chnList},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].remote_dns=" + remoteDns},
+		},
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global[0].dns_redirect=" + dnsRedirect},
+		},
+		// 设置 global_forwarding 配置项
+		{
+			command: "uci",
+			args:    []string{"set", "passwall.@global_forwarding[0].tcp_redir_ports=" + tcpRedirPorts},
+		},
 	}
-	return nil
-}
+	
+	// 执行每条命令
+	for _, cmd := range commands {
+		err := executeUciCommand(cmd.command, cmd.args)
+		if err != nil {
+			log.Fatalf("执行 uci 命令失败: %v", err)
+			return fmt.Errorf("执行 uci 命令失败: %v", err)
+		}
+	}
 
-// 重启服务
-func restartService() error {
-	// 执行重启服务命令
-	cmd := exec.Command("/etc/init.d/passwall", "restart")
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to restart service: %v", err)
-	}
 	return nil
 }
