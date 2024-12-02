@@ -639,8 +639,8 @@ func main() {
 	
 	printPasswallConfigs(passwallConfigs)
 
-	// 监视配置文件
-	go watchConfigFile(*configFilePath)
+	// 监视配置文件 和luci前端复制文件发生冲突，暂时弃用
+	// go watchConfigFile(*configFilePath)
 
 	// 启动任务
 	updateTaskRunners(loginConfigs, passwallConfigs) 
