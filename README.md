@@ -3,7 +3,7 @@
 ======================
 
 ### 使用方法:
-需要搭配openwrt使用，在路由器系统安装ipk包后，配置登录规则以及代理规则
+需要搭配openwrt使用，在路由器系统安装ipk包后，安装[luci包](https://github.com/Akinator365/luci-app-cumt-net)，配置登录规则以及代理规则
 
 ### 主界面：
 ![image](https://github.com/Akinator365/luci-app-cumt-net/blob/master/demo-png/main.png)
